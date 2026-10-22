@@ -2,17 +2,17 @@
 
 Extract the sequence of any CHM13 v2.0-annotated gene from **every HPRC Release 2 haplotype assembly** (464 haplotypes, plus CHM13 and GRCh38 as controls), **without downloading assemblies or the 5.6 GB alignment file**.
 
-```
-gene name(s) ──► CHM13 BED ──► fetch only the overlapping alignment records ──► interval in each haplotype
-                               (HTTP ranges on the HPRC R2 all-vs-CHM13 PAF)              │
-   per-gene FASTA + coords + QC flags ◄── HTTP ranges on each bgzipped assembly (samtools faidx)
-```
+<p align="center">
+  <img src="docs/figures/pipeline.svg" alt="genefinder pipeline: public inputs, one-time offset-index setup, five per-run steps, and how a CHM13 gene is projected onto haplotype contigs" width="100%">
+</p>
+<p align="center"><sub>Figure source: <a href="docs/figures/pipeline.tex">docs/figures/pipeline.tex</a> (TikZ) · <a href="docs/figures/pipeline.pdf">PDF</a> · <a href="docs/figures/pipeline.png">PNG</a></sub></p>
 
-It works in four steps:
-1. **Look up the gene.** Genes are found in the CHM13 v2.0 GENCODE (or RefSeq) annotation using the annotation's own coordinates.
+The numbered steps match the figure:
+1. **Look up the gene.** Genes are found in the CHM13 v2.0 GENCODE (or RefSeq) annotation using the annotation's own coordinates, and a ±5 kb flank is added.
 2. **Project.** The gene interval is projected onto every haplotype through the Release 2 alignments (`hprc465vschm13.aln.paf.gz`). Only the few MB of alignment records that overlap the gene are fetched, located through a small offset index that setup builds once.
-3. **Fetch.** The matching interval is read from each haplotype's assembly on the public HPRC bucket, in the gene's sense orientation.
-4. **Flag.** Each haplotype is reported as missing, partial, split across contigs or alignment blocks, or multi-copy. Nothing is dropped silently.
+3. **Chain and flag.** Each haplotype is reported as ok, missing, partial, split across contigs or alignment blocks, or multi-copy. Nothing is dropped silently.
+4. **Fetch.** The matching interval is read from each haplotype's assembly on the public HPRC bucket, in the gene's sense orientation.
+5. **Write outputs.** Each gene gets FASTA files, a coordinate table and a summary, with CHM13 and GRCh38 as controls.
 
 All inputs are public HTTPS. **[docs/DATA_SOURCES.md](docs/DATA_SOURCES.md)** lists every file, URL, size and checksum, and they are all set in [`config/sources.env`](config/sources.env).
 
