@@ -79,5 +79,40 @@ class TestChaining(unittest.TestCase):
         self.assertEqual(len(hits), 3)
 
 
+def write_bgzf(path, data, block=50):
+    """Minimal BGZF writer (tiny blocks so records straddle block boundaries) + EOF marker."""
+    import struct
+    import zlib
+    with open(path, "wb") as fh:
+        for i in range(0, len(data), block):
+            chunk = data[i:i + block]
+            c = zlib.compressobj(6, zlib.DEFLATED, -15)
+            cdata = c.compress(chunk) + c.flush()
+            bsize = 18 + len(cdata) + 8 - 1
+            fh.write(b"\x1f\x8b\x08\x04\x00\x00\x00\x00\x00\xff\x06\x00BC\x02\x00" + struct.pack("<H", bsize)
+                     + cdata + struct.pack("<II", zlib.crc32(chunk) & 0xffffffff, len(chunk)))
+        fh.write(bytes.fromhex("1f8b08040000000000ff0600424302001b0003000000000000000000"))
+
+
+class TestOffsetIndex(unittest.TestCase):
+    def test_index_and_range_fetch_recover_records(self):
+        from remote_project import fetch_range, inflate_blocks
+        recs = [f"q{i}#1#c\t1000\t{i}\t{i + 20}\t+\tCHM13#0#chr{i % 3}\t5000\t{i * 7}\t{i * 7 + 20}\t20\t20\t60"
+                f"\tcg:Z:20=" + "\tpad:Z:" + "x" * (i * 13 % 90) for i in range(40)]
+        with tempfile.TemporaryDirectory() as d:
+            paf = os.path.join(d, "t.paf.gz")
+            write_bgzf(paf, ("\n".join(recs) + "\n").encode())
+            out = subprocess.run([sys.executable, os.path.join(SCRIPTS, "build_paf_index.py"), paf],
+                                 capture_output=True, text=True, check=True).stdout.splitlines()
+            self.assertEqual(len(out), len(recs))
+            for row, rec in zip(out, recs):
+                t, ts, te, cs, ce, us, ul = row.split("\t")
+                f = rec.split("\t")
+                self.assertEqual((t, ts, te), (f[5], f[7], f[8]))
+                buf, where = inflate_blocks(fetch_range(paf, int(cs), int(ce)), int(cs))
+                start = where[int(cs)] + int(us)
+                self.assertEqual(buf[start:start + int(ul)].decode(), rec)
+
+
 if __name__ == "__main__":
     unittest.main()

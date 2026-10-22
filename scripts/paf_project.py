@@ -139,6 +139,32 @@ def project(cigar, tstart, qs, qe, strand, cs, ce):
     return project_many(cigar, tstart, qs, qe, strand, [(cs, ce)])[0]
 
 
+def project_line(line, idx):
+    """Project one PAF line onto every overlapping BED interval; yields output PAF lines."""
+    f = line.rstrip("\n").split("\t", 12)  # don't split the (large) tag/CIGAR part unless needed
+    if len(f) < 12:
+        return
+    tname, ts, te = f[5], int(f[7]), int(f[8])
+    hits = overlaps(idx, tname, ts, te)
+    if not hits:
+        return
+    tags = {t[:2]: t[5:] for t in (f[12].split("\t") if len(f) > 12 else [])}
+    cg = tags.get("cg")
+    if cg is None:
+        sys.stderr.write(f"no cg:Z on record {f[0]}:{f[2]}-{f[3]}, skipped\n")
+        return
+    qs, qe, strand = int(f[2]), int(f[3]), f[4]
+    results = project_many(cg, ts, qs, qe, strand, [(max(bs, ts), min(be, te)) for bs, be, _ in hits])
+    for (bs, be, name), r in zip(hits, results):
+        if r is None:
+            continue
+        q_lo, q_hi, t_lo, t_hi, ccig, m, x, ins, dele, gaps = r
+        alen = m + x + ins + dele
+        gi = m / (m + x + gaps) if (m + x + gaps) else 0.0
+        yield (f"{f[0]}\t{f[1]}\t{q_lo}\t{q_hi}\t{strand}\t{tname}\t{f[6]}\t{t_lo}\t{t_hi}"
+               f"\t{m}\t{alen}\t{f[11]}\tgi:f:{gi:.6f}\tch:Z:{tags.get('ch', 'NA')}\trn:Z:{name}\tcg:Z:{ccig}\n")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--bed", required=True)
@@ -148,28 +174,7 @@ def main():
     fh = sys.stdin if a.paf == "-" else open(a.paf)
     out = sys.stdout
     for line in fh:
-        f = line.rstrip("\n").split("\t", 12)  # don't split the (large) tag/CIGAR part unless needed
-        if len(f) < 12:
-            continue
-        tname, ts, te = f[5], int(f[7]), int(f[8])
-        hits = overlaps(idx, tname, ts, te)
-        if not hits:
-            continue
-        tags = {t[:2]: t[5:] for t in (f[12].split("\t") if len(f) > 12 else [])}
-        cg = tags.get("cg")
-        if cg is None:
-            sys.stderr.write(f"no cg:Z on record {f[0]}:{f[2]}-{f[3]}, skipped\n")
-            continue
-        qs, qe, strand = int(f[2]), int(f[3]), f[4]
-        results = project_many(cg, ts, qs, qe, strand, [(max(bs, ts), min(be, te)) for bs, be, _ in hits])
-        for (bs, be, name), r in zip(hits, results):
-            if r is None:
-                continue
-            q_lo, q_hi, t_lo, t_hi, ccig, m, x, ins, dele, gaps = r
-            alen = m + x + ins + dele
-            gi = m / (m + x + gaps) if (m + x + gaps) else 0.0
-            out.write(f"{f[0]}\t{f[1]}\t{q_lo}\t{q_hi}\t{strand}\t{tname}\t{f[6]}\t{t_lo}\t{t_hi}"
-                      f"\t{m}\t{alen}\t{f[11]}\tgi:f:{gi:.6f}\tch:Z:{tags.get('ch', 'NA')}\trn:Z:{name}\tcg:Z:{ccig}\n")
+        out.writelines(project_line(line, idx))
 
 
 if __name__ == "__main__":

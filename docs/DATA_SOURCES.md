@@ -8,7 +8,7 @@ genefinder only reads **public** data over anonymous HTTPS. No AWS account, cred
 
 Sizes and ETags below were recorded on 2026-10-21.
 
-## Downloaded once by `./run.sh --setup`
+## Used by `./run.sh --setup` and every run
 
 ### Release 2 all-haplotypes vs CHM13 alignments (`PAF_URL`)
 
@@ -19,7 +19,9 @@ Sizes and ETags below were recorded on 2026-10-21.
 - **Tags:** `cg:Z` CIGAR (`=`/`X`/`I`/`D`), `gi`/`bi`/`md` identity, `ch:Z` chain id.
 - **Format:** already BGZF (the gzip header has the `BC` field), so `impg index` reads it directly.
 - **Used for:** projecting CHM13 gene coordinates onto each haplotype.
-- **Without a local copy:** `--mode stream` streams it per run instead.
+- **Not stored by default.** `./run.sh --setup` reads it once, sequentially, to build `data/paf/hprc465vschm13.offsets.bed.gz` (~124 MB plus a tabix `.tbi`). For each record, that index holds its CHM13 interval and its byte range in this file. Each run then fetches only the records overlapping the requested genes with HTTP range requests, for example 466 records and ~13 MB for MALAT1.
+- **Other modes:** `./run.sh --setup --full` also stores the file and builds an impg index (6.3 GB) for `--mode impg`/`local`. `--mode stream` reads the whole file on every run instead.
+- **Rebuilding:** the offset index is valid only for this exact file. If the file changes (size or ETag), delete the index and rerun setup.
 
 ### Release 2 assembly index (`ASSEMBLY_INDEX_URL`)
 
@@ -30,7 +32,7 @@ Sizes and ETags below were recorded on 2026-10-21.
 
 ### CHM13 v2.0 annotation, GENCODE (`GENCODE_GFF3`)
 
-- **URL:** https://human-pangenomics.s3.amazonaws.com/T2T/CHM13/assemblies/annotation/chm13v2.0_GENCODEv35_CAT_Liftoff.vep.gff3.gz (plus `.tbi`)
+- **URL:** https://human-pangenomics.s3.amazonaws.com/T2T/CHM13/assemblies/annotation/chm13v2.0_GENCODEv35_CAT_Liftoff.vep.gff3.gz (a `.tbi` also exists; it isn't needed)
 - **Size:** 158,318,946 bytes
 - **Contents:** GENCODE v35 mapped to CHM13 with CAT/Liftoff. This is the default (`--annotation gencode`).
 
@@ -39,6 +41,7 @@ Sizes and ETags below were recorded on 2026-10-21.
 - **URL:** https://human-pangenomics.s3.amazonaws.com/T2T/CHM13/assemblies/annotation/chm13v2.0_RefSeq_Liftoff_v5.2.gff3.gz
 - **Size:** 56,368,414 bytes
 - **Contents:** RefSeq genes lifted to CHM13 (`--annotation refseq`).
+- **Download:** fetched on first use, not during setup.
 
 ### CHM13 analysis set `.fai` (`CHM13_FASTA_URL`)
 
@@ -46,7 +49,7 @@ Sizes and ETags below were recorded on 2026-10-21.
 - **Size:** 988 bytes
 - **Used for:** chromosome sizes, so padded intervals are clipped at chromosome ends.
 
-**Disk after setup:** about 6.5 GB, made up of the PAF (5.6 GB), the impg index (0.66 GB) and the annotations (0.2 GB).
+**Disk after setup:** about 0.3 GB by default: the GENCODE GFF3 (158 MB), the PAF offset index (124 MB), the assembly index and the CHM13 `.fai`. With `--full`, add the PAF (5.6 GB) and the impg index (0.66 GB).
 
 ## Read remotely on every run (never downloaded whole)
 

@@ -5,7 +5,6 @@
 set -euo pipefail
 LOCUS=$1; N=${2:-10}; OUT=${3:-$PWD/genefinder_out}
 REPO=$(cd "$(dirname "$0")/.." && pwd)
-[[ -x $REPO/tools/env/bin/minimap2 ]] && export PATH=$REPO/tools/env/bin:$PATH
 D=$OUT/genes/$LOCUS
 V=$D/validation; mkdir -p "$V"
 # CHM13 control is the first record of gene.fa

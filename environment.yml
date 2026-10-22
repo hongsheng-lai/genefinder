@@ -1,6 +1,5 @@
-# Conda/mamba environment for genefinder.
-#   mamba env create -f environment.yml && conda activate genefinder
-# (scripts/setup.sh creates the same environment under tools/env automatically if the tools are missing)
+# Conda environment for genefinder (Linux and macOS, x86_64 and arm64):
+#   conda env create -f environment.yml && conda activate genefinder
 # Versions used for the reference run: samtools/htslib 1.24, impg 0.5.0, minimap2 2.31, python 3.11.
 name: genefinder
 channels:
@@ -8,8 +7,8 @@ channels:
   - bioconda
 dependencies:
   - python>=3.9
-  - samtools>=1.16   # remote faidx over HTTPS needs htslib with libcurl (bioconda builds have it)
-  - htslib>=1.16     # bgzip
-  - impg>=0.5.0
-  - minimap2         # validation only
+  - samtools>=1.16   # reads the remote assemblies over HTTPS (bioconda builds include libcurl)
+  - htslib>=1.16     # bgzip, tabix
   - curl
+  - minimap2         # optional: scripts/validate.sh
+  - impg>=0.5.0      # optional: only for --mode impg (./run.sh --setup --full)

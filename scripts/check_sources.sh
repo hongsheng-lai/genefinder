@@ -6,6 +6,7 @@
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 source "$HERE/../config/sources.env"
+source "$HERE/compat.sh"
 N=${1:-5}
 
 head_info() {  # url -> status, size, etag, last-modified
@@ -25,7 +26,7 @@ echo
 echo "== assembly index: $ASSEMBLY_INDEX_URL"
 tmp=$(mktemp); trap 'rm -f "$tmp"' EXIT
 curl -sS --fail --retry 3 -o "$tmp" "$ASSEMBLY_INDEX_URL"
-echo "md5 $(md5sum "$tmp" | cut -d' ' -f1)  (expected 90c9e66a58580484facd59d3ed28c52c for the pinned commit)"
+echo "md5 $(md5_of "$tmp")  (expected 90c9e66a58580484facd59d3ed28c52c for the pinned commit)"
 python3 - "$tmp" "$N" "$HPRC_BUCKET" <<'EOF' | while read -r u; do for ext in "" .fai .gzi; do head_info "$u$ext"; done; done
 import csv, random, sys
 rows = list(csv.DictReader(open(sys.argv[1])))
