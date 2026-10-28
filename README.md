@@ -19,7 +19,7 @@ All inputs are public HTTPS. **[docs/DATA_SOURCES.md](docs/DATA_SOURCES.md)** li
 ## Requirements
 
 - Linux or macOS (x86_64 or arm64), with `bash` and `curl`.
-- A conda environment with the tools in [`environment.yml`](environment.yml):
+- A conda environment with the tools in [`environment.yml`](environment.yml) (top-level versions pinned), or, for an exact copy of the tested environment, an explicit lock file for your platform: `conda create -n genefinder --file envs/genefinder.<linux-64|osx-64|osx-arm64>.lock.txt` (see [envs/README.md](envs/README.md)):
   - Python ≥ 3.9 (standard library only)
   - samtools/htslib ≥ 1.16 with libcurl; the bioconda builds have it
   - optional: minimap2 for validation, impg for `--mode impg`
@@ -53,7 +53,7 @@ More examples:
 The 466 Release 2 assemblies are mirrored in `/ccb/salz8/HPRC/assemblies/fasta/` (bgzip + `.fai` + `.gzi`, same file names as the assembly index). When that directory exists, `run.sh` reads sequences from it with local `samtools faidx` instead of S3, and with a stored PAF (`--setup --full`) `--mode auto` projects with impg. `--offline` makes this strict: it stops instead of touching the network.
 
 ```bash
-export PATH=/ccb/salz4-2/hlai21/genefinder/tools/env/bin:$PATH    # or: conda activate genefinder
+export PATH=/ccb/salz4-2/hlai21/genefinder/tools/env-clean/bin:$PATH   # shared env built from envs/genefinder.linux-64.lock.txt
 ./run.sh MALAT1 --offline -j 32      # MALAT1: ~33 s total, 7 s fetch (vs ~42 s fetch from S3); same sequences
 ```
 

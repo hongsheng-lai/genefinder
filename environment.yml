@@ -1,14 +1,17 @@
 # Conda environment for genefinder (Linux and macOS, x86_64 and arm64):
 #   conda env create -f environment.yml && conda activate genefinder
-# Versions used for the reference run: samtools/htslib 1.24, impg 0.5.0, minimap2 2.31, python 3.11.
+# Top-level tools are pinned to the reference run. For a bit-for-bit identical environment use the
+# explicit lock file for your platform instead (every package, exact build + md5):
+#   conda create -n genefinder --file envs/genefinder.<linux-64|osx-64|osx-arm64>.lock.txt
+# See envs/README.md.
 name: genefinder
 channels:
   - conda-forge
   - bioconda
 dependencies:
-  - python>=3.9
-  - samtools>=1.16   # reads the remote assemblies over HTTPS (bioconda builds include libcurl)
-  - htslib>=1.16     # bgzip, tabix
+  - python=3.11
+  - samtools=1.24   # reads the remote assemblies over HTTPS (bioconda builds include libcurl)
+  - htslib=1.24     # bgzip, tabix
   - curl
-  - minimap2         # optional: scripts/validate.sh
-  - impg>=0.5.0      # optional: only for --mode impg (./run.sh --setup --full)
+  - minimap2=2.31   # optional: scripts/validate.sh
+  - impg=0.5.0      # optional: only for --mode impg (./run.sh --setup --full)
