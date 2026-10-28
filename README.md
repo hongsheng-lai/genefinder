@@ -48,6 +48,17 @@ More examples:
 ./run.sh --biotype protein_coding ALL --mode impg --fetch stream -j 64   # the whole annotation (see "Scaling")
 ```
 
+### On the Salz cluster (no downloads)
+
+The 466 Release 2 assemblies are mirrored in `/ccb/salz8/HPRC/assemblies/fasta/` (bgzip + `.fai` + `.gzi`, same file names as the assembly index). When that directory exists, `run.sh` reads sequences from it with local `samtools faidx` instead of S3, and with a stored PAF (`--setup --full`) `--mode auto` projects with impg. `--offline` makes this strict: it stops instead of touching the network.
+
+```bash
+export PATH=/ccb/salz4-2/hlai21/genefinder/tools/env/bin:$PATH    # or: conda activate genefinder
+./run.sh MALAT1 --offline -j 32      # MALAT1: ~33 s total, 7 s fetch (vs ~42 s fetch from S3); same sequences
+```
+
+Another mirror: `--fasta-dir DIR` or `export LOCAL_FASTA_DIR=DIR`. `--fasta-dir none` forces S3. An assembly missing from the mirror is read from S3 (or, with `--offline`, the run stops and lists it).
+
 - **Lookup:** genes are matched by `gene_name`, `Name`, `gene`, `gene_id`, `ID`, or Ensembl ID (with or without version).
 - **Reporting:** genes that aren't found, or that match several annotated loci, are reported in `work/<batch>/batch.lookup.txt`. Extra loci become `<GENE>_copy2` and so on.
 - **Rerunning:** reruns resume. Assemblies already fetched in a batch are skipped, and failures are retried.
@@ -61,7 +72,9 @@ More examples:
 | `--annotation gencode\|refseq\|PATH` | `gencode` | CHM13 v2.0 GFF3 (GENCODE v35 CAT/Liftoff, or RefSeq Liftoff, downloaded on first use) |
 | `--flank N` | 5000 | flank on each side for `*.padded.fa` |
 | `--biotype B` | – | keep only genes with this biotype (e.g. `protein_coding`) |
-| `--mode remote\|impg\|local\|stream` | `remote` | projection engine (see below) |
+| `--mode auto\|remote\|impg\|local\|stream` | `auto` | projection engine (see below); `auto` = impg if the PAF is stored and impg is installed, else local if the PAF is stored, else remote |
+| `--fasta-dir DIR\|none` | `$LOCAL_FASTA_DIR` if it exists (`/ccb/salz8/HPRC/assemblies/fasta`) | local copies of the assemblies; `none` = S3 |
+| `--offline` | off | no network: require a stored PAF and every assembly in `--fasta-dir` |
 | `--fetch auto\|faidx\|stream` | `auto` | sequence access (see below) |
 | `-j N` | 16 | parallel requests and processes; everything remote is latency-bound, so 32–64 is faster |
 | `--batch NAME` | first gene / list name | names `work/` and `logs/` subdirectories |
@@ -124,8 +137,8 @@ All four modes produce the same intervals. impg can differ by 1 bp at a gene end
 
 | `--mode` | Stored data | MALAT1 | Best for |
 |---|---|---|---|
-| `remote` (default) | offset index, 0.12 GB | ~12 s at `-j 16`, ~13 MB fetched | one to a few thousand genes |
-| `impg` | PAF + impg index, 6.3 GB (`--setup --full`) | 0.2 s | very large batches (all genes) |
+| `remote` (`auto` without a stored PAF) | offset index, 0.12 GB | ~12 s at `-j 16`, ~13 MB fetched | one to a few thousand genes |
+| `impg` (`auto` with a stored PAF) | PAF + impg index, 6.3 GB (`--setup --full`) | 0.2 s | very large batches (all genes) |
 | `local` | PAF, 5.6 GB (`--setup --full`) | ~20 s | large batches without impg |
 | `stream` | nothing | ~12 min, 5.6 GB downloaded per run | no setup at all |
 
@@ -135,7 +148,7 @@ For a single gene, about 466 alignment records overlap it (one per haplotype). E
 
 - **`faidx`:** HTTP range requests to each remote assembly. It's latency-bound at about 0.4 s and 0.2 MB per region, so cost grows with the number of genes. Best for up to a few hundred genes.
 - **`stream`:** reads each assembly once (~0.9 GB, ~20–40 s) and extracts every region of the batch in that pass. The cost is fixed at ~420 GB of transfer per batch, however many genes it holds. Best for thousands of genes.
-- **`auto` (default):** streams an assembly when the batch needs more than 3,000 regions from it.
+- **`auto` (default):** streams an assembly when the batch needs more than 3,000 regions from it. Local assemblies (`--fasta-dir`) always use `faidx`, which has no latency cost there.
 
 ## Performance
 

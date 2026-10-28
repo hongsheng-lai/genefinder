@@ -10,7 +10,7 @@ SCRIPTS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 sys.path.insert(0, SCRIPTS)
 
 from paf_project import project, project_many  # noqa: E402
-from summarize_projection import chain_hits, union_len  # noqa: E402
+from summarize_projection import chain_hits, load_index, union_len  # noqa: E402
 
 # toy alignment: target 100..120 (20 bp), query 0..19; 5 match, 2 bp insertion, 5 match, 3 bp deletion, 7 match
 CIGAR = "5=2I5=3D7="
@@ -112,6 +112,22 @@ class TestOffsetIndex(unittest.TestCase):
                 buf, where = inflate_blocks(fetch_range(paf, int(cs), int(ce)), int(cs))
                 start = where[int(cs)] + int(us)
                 self.assertEqual(buf[start:start + int(ul)].decode(), rec)
+
+
+class TestLocalFasta(unittest.TestCase):
+    def test_load_index_prefers_complete_local_copy(self):
+        with tempfile.TemporaryDirectory() as d:
+            idx = os.path.join(d, "index.csv")
+            with open(idx, "w") as fh:
+                fh.write("sample_id,haplotype,assembly_name,assembly\n"
+                         "A,1,A_pat,s3://human-pangenomics/x/A.fa.gz\n"
+                         "B,2,B_mat,s3://human-pangenomics/x/B.fa.gz\n")
+            for f in ("A.fa.gz", "A.fa.gz.fai", "A.fa.gz.gzi", "B.fa.gz"):  # B lacks .fai/.gzi
+                open(os.path.join(d, f), "w").close()
+            hap = load_index(idx, d)
+            self.assertEqual(hap["A#1"]["url"], os.path.join(d, "A.fa.gz"))
+            self.assertTrue(hap["B#2"]["url"].startswith("https://"))
+            self.assertTrue(load_index(idx)["A#1"]["url"].startswith("https://"))
 
 
 if __name__ == "__main__":

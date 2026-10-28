@@ -13,10 +13,15 @@
 #   --annotation gencode|refseq|PATH   CHM13 v2.0 GFF3 (default gencode = GENCODEv35 CAT/Liftoff)
 #   --flank N                          flank for *.padded.fa (default 5000)
 #   --biotype B                        only genes with this biotype (e.g. protein_coding)
-#   --mode remote|impg|local|stream    projection engine. remote (default): fetch only the alignment records
-#                                      overlapping the genes from the S3 PAF (HTTP ranges, via the offset index);
-#                                      impg / local: use the stored PAF (setup --full); stream: read the whole
-#                                      PAF from S3 each run, nothing stored
+#   --mode auto|remote|impg|local|stream  projection engine. auto (default): impg if the PAF is stored
+#                                      (setup --full) and impg is installed, else local if the PAF is stored,
+#                                      else remote. remote: fetch only the alignment records overlapping the
+#                                      genes from the S3 PAF (HTTP ranges, via the offset index); impg / local:
+#                                      use the stored PAF; stream: read the whole PAF from S3 each run
+#   --fasta-dir DIR|none               local copies of the assemblies (bgzip + .fai + .gzi, index file names);
+#                                      default $LOCAL_FASTA_DIR (config/sources.env) when it exists, else none (S3)
+#   --offline                          no network: require a stored PAF (impg/local) and every assembly in
+#                                      --fasta-dir (e.g. on the Salz cluster after setup --full)
 #   --fetch auto|faidx|stream          sequence fetch: faidx = remote samtools faidx (range requests, best
 #                                      for few genes); stream = one curl|bgzip pass per assembly (best for
 #                                      thousands of genes); auto = stream if >3000 regions/assembly
@@ -32,7 +37,7 @@ S=$ROOT/scripts
 source "$ROOT/config/sources.env"
 source "$S/compat.sh"
 
-ANN=gencode; FLANK=5000; BIOTYPE=; MODE=remote; BATCH=; JOBS=16; LIST=; SETUP=0; FULL=0; GENES=(); FETCH=auto
+ANN=gencode; FLANK=5000; BIOTYPE=; MODE=auto; FASTA_DIR=$LOCAL_FASTA_DIR; OFFLINE=0; BATCH=; JOBS=16; LIST=; SETUP=0; FULL=0; GENES=(); FETCH=auto
 OUT=$PWD/genefinder_out; DATA=${GENEFINDER_DATA:-$ROOT/data}
 while (($#)); do
   case $1 in
@@ -46,9 +51,11 @@ while (($#)); do
     -j) JOBS=$2; shift 2;;
     --fetch) FETCH=$2; shift 2;;
     --gene-list) LIST=$2; shift 2;;
+    --fasta-dir) FASTA_DIR=$2; shift 2;;
+    --offline) OFFLINE=1; shift;;
     --setup) SETUP=1; shift;;
     --full) FULL=1; shift;;
-    -h|--help) sed -n '2,30p' "$0"; exit 0;;
+    -h|--help) sed -n '2,33p' "$0"; exit 0;;
     -*) echo "unknown option $1 (see --help)"; exit 1;;
     *) GENES+=("$1"); shift;;
   esac
@@ -64,13 +71,25 @@ if ((SETUP)); then
   exit 0
 fi
 
-[[ ${#GENES[@]} -gt 0 || -n $LIST ]] || { sed -n '2,30p' "$0"; exit 1; }
+[[ ${#GENES[@]} -gt 0 || -n $LIST ]] || { sed -n '2,33p' "$0"; exit 1; }
 [[ -s $IDX ]] || { echo "[run] data not set up in $DATA: run ./run.sh --setup first"; exit 1; }
 for t in samtools bgzip tabix python3 curl; do command -v $t >/dev/null || { echo "[run] $t not on PATH (run --setup)"; exit 1; }; done
+if [[ $FASTA_DIR == none || ! -d $FASTA_DIR ]]; then FASTA_DIR=; fi
+if [[ $MODE == auto ]]; then
+  if [[ -f $PAF.impg ]] && command -v impg >/dev/null; then MODE=impg
+  elif [[ -s $PAF ]]; then MODE=local
+  else MODE=remote; fi
+fi
+if ((OFFLINE)); then
+  [[ $MODE == impg || $MODE == local ]] || { echo "[run] --offline needs a stored PAF (./run.sh --setup --full) and --mode impg|local"; exit 1; }
+  [[ -n $FASTA_DIR ]] || { echo "[run] --offline needs --fasta-dir (local assemblies); $LOCAL_FASTA_DIR not found"; exit 1; }
+  [[ $ANN != refseq || -s $DATA/annotation/$REFSEQ_GFF3 ]] || { echo "[run] --offline: RefSeq annotation not downloaded"; exit 1; }
+fi
 mkdir -p "$OUT"; OUT=$(cd "$OUT" && pwd)
 BATCH=${BATCH:-$( [[ -n $LIST ]] && basename "${LIST%.*}" || echo "${GENES[0]}" )}
 W=$OUT/work/$BATCH; LOG=$OUT/logs/$BATCH; mkdir -p "$W" "$LOG" "$OUT/genes"
 echo "[run] batch=$BATCH mode=$MODE fetch=$FETCH annotation=$ANN flank=$FLANK jobs=$JOBS outdir=$OUT"
+echo "[run] assemblies: ${FASTA_DIR:-S3 ($HPRC_BUCKET)}"
 
 timed() {  # timed STEP cmd...  -> LOG/time.STEP.txt (GNU time -v, when available)
   local step=$1; shift
@@ -117,7 +136,11 @@ esac
 
 # 3. hits, flags, fetch regions
 timed summarize python3 "$S/summarize_projection.py" --paf "$W/projection.paf" --genes "$W/batch.genes.tsv" \
-  --index "$IDX" --outdir "$OUT/genes" --regions-out "$W/regions.tsv" --flank "$FLANK"
+  --index "$IDX" --outdir "$OUT/genes" --regions-out "$W/regions.tsv" --flank "$FLANK" ${FASTA_DIR:+--fasta-dir "$FASTA_DIR"}
+if ((OFFLINE)) && awk -F'\t' 'NR > 1 && $2 ~ /:\/\// {f = 1} END {exit !f}' "$W/regions.tsv"; then
+  echo "[run] --offline: some assemblies are not in $FASTA_DIR:"
+  awk -F'\t' 'NR > 1 && $2 ~ /:\/\// {print $1}' "$W/regions.tsv" | sort -u | head; exit 1
+fi
 
 # 4. sequence fetch (one job per assembly for the whole batch, parallel, retried, resumable)
 timed fetch python3 "$S/fetch_seqs.py" --regions "$W/regions.tsv" --workdir "$W/fetch" --outdir "$OUT/genes" \

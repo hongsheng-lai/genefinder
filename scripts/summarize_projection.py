@@ -37,11 +37,22 @@ def s3_to_https(u):
     return S3 + u[len("s3://human-pangenomics/"):] if u.startswith("s3://human-pangenomics/") else u
 
 
-def load_index(path):
+def load_index(path, fasta_dir=None):
+    """haplotype -> assembly URL; with fasta_dir, a local copy (same file name, bgzip + .fai + .gzi) is used instead."""
     hap = {}
+    n_local = 0
     for r in csv.DictReader(open(path)):
         key = f"{r['sample_id']}#{r['haplotype']}"
-        hap[key] = dict(url=s3_to_https(r["assembly"]), name=r["assembly_name"])
+        url = s3_to_https(r["assembly"])
+        if fasta_dir:
+            loc = os.path.join(fasta_dir, os.path.basename(r["assembly"]))
+            if all(os.path.exists(loc + x) for x in ("", ".fai", ".gzi")):
+                url = loc
+                n_local += 1
+        hap[key] = dict(url=url, name=r["assembly_name"])
+    if fasta_dir:
+        sys.stderr.write(f"local assemblies: {n_local}/{len(hap)} found in {fasta_dir}"
+                         f"{'' if n_local == len(hap) else ' (the rest are read from S3)'}\n")
     return hap
 
 
@@ -110,6 +121,7 @@ def main():
     ap.add_argument("--paf", required=True)
     ap.add_argument("--genes", required=True)
     ap.add_argument("--index", required=True)
+    ap.add_argument("--fasta-dir", help="directory with local copies of the assemblies (bgzip + .fai + .gzi)")
     ap.add_argument("--outdir", required=True)
     ap.add_argument("--regions-out", required=True)
     ap.add_argument("--flank", type=int, default=5000)
@@ -119,7 +131,7 @@ def main():
     ap.add_argument("--partial", type=float, default=0.95)
     a = ap.parse_args()
 
-    index = load_index(a.index)
+    index = load_index(a.index, a.fasta_dir)
     genes = {r["locus"]: r for r in csv.DictReader(open(a.genes), delimiter="\t")}
     for g in genes.values():
         for k in ("start", "end", "pad_start", "pad_end"):

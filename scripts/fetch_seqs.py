@@ -10,6 +10,7 @@ One job per (assembly, orientation) gathers every region of the batch for that a
   stream : `curl URL | bgzip -dc | stream_extract.py` - one sequential pass over the assembly
            (~0.9 GB compressed), extracting all regions on the fly; the assembly is never stored.
   auto   : stream when an assembly job has more than --stream-threshold regions, else faidx.
+           A local assembly (a path rather than a URL, from --fasta-dir) is always read with faidx.
 A gene region inside the padded region of the same hit is sliced from it rather than fetched.
 Resumable: a job whose <workdir>/<hap>.<orient>.fa exists is skipped (outputs written atomically).
 After all jobs succeed and the per-gene FASTAs are written, the per-assembly cache is removed
@@ -62,7 +63,8 @@ def fetch_one(hap, url, orient, regions, workdir, retries, method):
             cmd[2:2] = ["-i", "--mark-strand", "no"]
         shell = False
     else:  # orient == "both": regions carry a "-" column when they need reverse-complementing
-        cmd = (f"set -o pipefail; curl -sS --retry 5 '{url}' | bgzip -dc | "
+        reader = f"curl -sS --retry 5 '{url}'" if "://" in url else f"cat '{url}'"
+        cmd = (f"set -o pipefail; {reader} | bgzip -dc | "
                f"python3 '{HERE}/stream_extract.py' --regions '{rfile}' > '{out}.tmp'")
         shell = True
     err = [""]
@@ -117,7 +119,9 @@ def main():
     per_hap = defaultdict(set)
     for r in rows:
         per_hap[r["haplotype"]].add((r["src"], r["orient"]))
-    hap_method = {h: (a.method if a.method != "auto" else ("stream" if len(v) > a.stream_threshold else "faidx"))
+    hap_url = {r["haplotype"]: r["url"] for r in rows}
+    hap_method = {h: (a.method if a.method != "auto" else
+                      ("stream" if len(v) > a.stream_threshold and "://" in hap_url[h] else "faidx"))
                   for h, v in per_hap.items()}
     jobs = defaultdict(set)  # (hap, url, orient) -> regions to fetch
     for r in rows:
