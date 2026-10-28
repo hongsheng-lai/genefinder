@@ -1,9 +1,6 @@
 # Conda environment for genefinder (Linux and macOS, x86_64 and arm64):
 #   conda env create -f environment.yml && conda activate genefinder
-# Top-level tools are pinned to the reference run. For a bit-for-bit identical environment use the
-# explicit lock file for your platform instead (every package, exact build + md5):
-#   conda create -n genefinder --file envs/genefinder.<linux-64|osx-64|osx-arm64>.lock.txt
-# See envs/README.md.
+# Tools are pinned to the versions used for the reference run.
 name: genefinder
 channels:
   - conda-forge
