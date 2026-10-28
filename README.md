@@ -48,12 +48,17 @@ More examples:
 ./run.sh --biotype protein_coding ALL --mode impg --fetch stream -j 64   # the whole annotation (see "Scaling")
 ```
 
-### On the Salz cluster (no downloads)
+### On the Salz cluster (assemblies read locally)
 
-The 466 Release 2 assemblies are mirrored in `/ccb/salz8/HPRC/assemblies/fasta/` (bgzip + `.fai` + `.gzi`, same file names as the assembly index). When that directory exists, `run.sh` reads sequences from it with local `samtools faidx` instead of S3, and with a stored PAF (`--setup --full`) `--mode auto` projects with impg. `--offline` makes this strict: it stops instead of touching the network.
+The 466 Release 2 assemblies are mirrored in `/ccb/salz8/HPRC/assemblies/fasta/` (bgzip + `.fai` + `.gzi`, same file names as the assembly index). When that directory exists, `run.sh` reads sequences from it with local `samtools faidx` instead of S3. With a stored PAF (`--setup --full`), `--mode auto` projects with impg, so after setup a run needs no network. `--offline` makes this strict: it stops instead of touching the network.
+
+Set up exactly as anywhere else, from your own clone:
 
 ```bash
-export PATH=/ccb/salz4-2/hlai21/genefinder/tools/env-clean/bin:$PATH   # shared env built from environment.yml
+git clone https://github.com/hongsheng-lai/genefinder.git
+cd genefinder
+conda env create -f environment.yml && conda activate genefinder
+./run.sh --setup --full              # one time: stores the PAF + impg index (6.3 GB) in ./data
 ./run.sh MALAT1 --offline -j 32      # MALAT1: ~33 s total, 7 s fetch (vs ~42 s fetch from S3); same sequences
 ```
 
