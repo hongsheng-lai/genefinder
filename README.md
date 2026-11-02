@@ -59,8 +59,10 @@ git clone https://github.com/hongsheng-lai/genefinder.git
 cd genefinder
 conda env create -f environment.yml && conda activate genefinder
 ./run.sh --setup --full              # one time: stores the PAF + impg index (6.3 GB) in ./data
-./run.sh MALAT1 --offline -j 32      # MALAT1: ~33 s total, 7 s fetch (vs ~42 s fetch from S3); same sequences
+./run.sh MALAT1 --offline -j 32 --outdir /dev/shm/$USER/gf   # MALAT1: ~42 s (~73 s with --outdir on NFS); same sequences as S3
 ```
+
+Offline impg is the fastest mode at every batch size (1.3× faster than S3 for one gene, 3.5× for 100 genes; see [Offline vs online timing](#offline-vs-online-timing)). Put `--outdir` on node-local disk or `/dev/shm` and copy the results afterwards: the fetch step creates and deletes ~2 small files per assembly, and on NFS that takes ~4× longer than the reads themselves.
 
 Another mirror: `--fasta-dir DIR` or `export LOCAL_FASTA_DIR=DIR`. `--fasta-dir none` forces S3. An assembly missing from the mirror is read from S3 (or, with `--offline`, the run stops and lists it).
 
@@ -169,6 +171,22 @@ Reference run: Linux, 128 CPUs, NFS storage.
 ¹ Measured for the bounded-memory fetch step on a 64-assembly × 200-gene batch.
 
 For MALAT1, 464/464 haplotypes were extracted. The median length was 8,829 bp (equal to CHM13), and all 466 sequences align to CHM13 on the + strand at ≥ 99% identity. The one outlier, HG00558#1 at 9,190 bp, carries a polymorphic Alu insertion and is flagged `split_blocks`.
+
+### Offline vs online timing
+
+Salz cluster node (128 CPUs, assemblies on the NFS mirror, `--outdir` on NFS), `-j 32`, fresh output directory per run. Gene sets: MALAT1, and 10 or 100 protein-coding autosomal genes sampled at random. Wall time in seconds, mean of two runs where both were done (the runs agreed within 10%).
+
+| Config | 1 gene | 10 genes | 100 genes |
+|---|---|---|---|
+| `--offline --mode impg` | **73** | **151** | **347** |
+| `--offline --mode local` | 94 | 189 | 429 |
+| `--mode remote`, local assemblies | 79 | 193 | 628 |
+| `--mode remote --fasta-dir none` (all S3) | 93 | 258 | 1222 |
+
+- **Projection:** impg takes 0.3–3 s. `local` reads the 5.6 GB PAF on every run (22–42 s). `remote` takes ~6 s for one gene but grows with the number of genes.
+- **Fetch:** this is the largest step in every config. Local assemblies save 15–60% compared with S3.
+- **Output directory:** with `--outdir /dev/shm/...`, MALAT1 `--offline --mode impg` takes 42 s instead of 73 s (fetch 14 s instead of 58 s), with byte-identical output.
+- **Same results:** `local`, `remote` and S3 produce byte-identical FASTA. impg produces the same sequences, except the 1 bp boundary case described under [Choosing a projection mode](#choosing-a-projection-mode). In multi-copy haplotypes, impg can label a different hit as primary vs `copy2` (22 of 46,808 records in the 100-gene batch).
 
 ### Scaling to all genes
 
