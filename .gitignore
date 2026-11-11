@@ -1,7 +1,6 @@
-# one-time downloads, impg index, local tool env (created by ./run.sh --setup)
+# one-time pre-build data (genefinder.py setup), benchmark runs, results
 /data/
-/tools/
-# default results directory
+/bench/
 genefinder_out/
 __pycache__/
 *.pyc
