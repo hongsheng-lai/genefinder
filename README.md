@@ -63,7 +63,7 @@ Reference run, Salz cluster, MALAT1 (8.8 kb, chr11), `-j 32`, starting from an e
 
 | step | online | offline |
 |---|---|---|
-| pre-build (one time) | 280 s (5.6 GB PAF streamed from S3; 160 s on another run) | 135 s (462 Liftoff GFF3s, cold cache) |
+| pre-build (one time) | 165 s (5.6 GB PAF streamed from S3; 160–280 s over three runs, depending on S3 throughput) | 135 s (462 Liftoff GFF3s, cold cache) |
 | data kept | 119 MB | 402 MB |
 | query MALAT1 | 47.7 s (repeat: 45.3 s) | 0.6 s (repeat: 0.7 s) |
 
