@@ -41,6 +41,13 @@ class TestChain(unittest.TestCase):
     def test_tandem_copy(self):
         self.assertEqual(len(chain([piece("c", 0, 1000, 0, 1000), piece("c", 3000, 4000, 0, 1000)], 1000)), 2)
 
+    def test_overlapping_records_one_hit(self):
+        # collinear alignment records that overlap at their ends (HG00558#1 at MALAT1)
+        h = chain([piece("c", 68048000, 68056920, 65491261, 65499820), piece("c", 68047780, 68050000, 65491041, 65492900)],
+                  65499820 - 65491041)
+        self.assertEqual(len(h), 1)
+        self.assertEqual((h[0]["start"], h[0]["end"], h[0]["cov"]), (68047780, 68056920, 1.0))
+
     def test_far_apart(self):
         self.assertEqual(len(chain([piece("c", 0, 500, 0, 500), piece("c", 90000, 90500, 500, 1000)], 1000)), 2)
 

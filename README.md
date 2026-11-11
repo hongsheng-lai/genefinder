@@ -30,7 +30,7 @@ The two modes locate the gene in each haplotype differently.
 
 Both modes look genes up by `gene_name` in the same RefSeq namespace. Online uses the CHM13 RefSeq Liftoff v5.2 annotation, and the per-haplotype files were lifted from CHM13 RefSeq. The CHM13 control comes from that CHM13 annotation in both modes.
 
-Gene boundaries can differ by a few bp. A projection reproduces the CHM13 gene ends, while Liftoff places the ends of the lifted gene model. `tests/benchmark.sh` measures this.
+The boundaries could differ in principle: projection reproduces the CHM13 gene ends, while Liftoff places the lifted gene model's ends. On the genes benchmarked below they are identical. `tests/compare.py` reports any difference.
 
 ## Output
 
@@ -63,30 +63,20 @@ Reference run, Salz cluster, MALAT1 (8.8 kb, chr11), `-j 32`, starting from an e
 
 | step | online | offline |
 |---|---|---|
-| pre-build (one time) | 165 s (5.6 GB PAF streamed from S3; 160–280 s over three runs, depending on S3 throughput) | 135 s (462 Liftoff GFF3s, cold cache) |
+| pre-build (one time) | 165 s (5.6 GB PAF streamed from S3; 160–280 s over three runs, depending on S3 throughput) | 133–135 s (scan of 462 Liftoff GFF3s, 24 GB) |
 | data kept | 119 MB | 402 MB |
-| query MALAT1 | 47.7 s (repeat: 45.3 s) | 0.6 s (repeat: 0.7 s) |
+| query MALAT1 (8.8 kb) | 47.7 s (repeat: 45.3 s) | 0.6 s (repeat: 0.7 s) |
 
 Online time is mostly network latency: 6.7 s to locate the gene (466 PAF records, 12.8 MB in range requests) and ~40 s to fetch 466 sequences from S3 with samtools.
 
-How the two methods compare on MALAT1:
+How the two methods compare (`tests/compare.py`; haplotypes found by both modes):
 
-| | online | offline |
-|---|---|---|
-| control | 1 | 1 |
-| fragments | 1 | 0 |
-| no_annotation | 0 | 3 |
-| ok | 464 | 462 |
+| gene | strand | haplotypes in both | identical coordinates and sequence | only online | extra online hits |
+|---|---|---|---|---|---|
+| MALAT1 | + | 462 | 462 | GRCh38, HG002 ×2 | none |
+| TP53 | − | 462 | 462 | GRCh38, HG002 ×2 | HG01074#1: a second, partial (20%) copy 100 kb away, `fragments` |
 
-Haplotypes found by both: 462; same contig, strand and overlapping interval: 462
-- identical start and end: 461; identical sequence: 461
-- |start difference|: 0 bp: 461, <=10 bp: 461, max: 220 bp (n=462)
-- |end difference|: 0 bp: 462, <=10 bp: 462, max: 0 bp (n=462)
-- |length difference|: 0 bp: 461, <=10 bp: 461, max: 220 bp (n=462)
-- found only online: 3 GRCh38#0 HG002#1 HG002#2
-- found only offline: 0 
-
-The single difference is HG00558#1. Its alignment re-covers ~220 bp of CHM13 at the gene's 5′ end, so projection reports the gene as a 97.5%-coverage hit plus a fragment. Liftoff instead places one 9,140 bp gene model (sequence identity 0.959).
+The two modes agree base for base wherever both find the gene. Online also covers GRCh38 and HG002, which have no Liftoff annotation. It can also flag extra partial copies that Liftoff does not place.
 
 ## Data sources
 

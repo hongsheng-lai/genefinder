@@ -310,15 +310,30 @@ def paf_records(url, index, chrom, start, end, jobs):
     return lines
 
 
+def union_len(ivs):
+    tot, end = 0, None
+    for a, b in sorted(ivs):
+        if end is None or a > end:
+            tot += b - a
+            end = b
+        elif b > end:
+            tot += b - end
+            end = b
+    return tot
+
+
 def chain(pieces, gene_len):
-    """Group projected pieces of one haplotype into hits: same contig and strand, < CHAIN_GAP apart on the
-    contig, and not re-covering CHM13 bases already in the hit (that would be a tandem copy)."""
+    """Group projected pieces of one haplotype into hits (same contig and strand). A piece joins the current
+    hit if it overlaps it on the contig (the release's alignment records overlap at their ends), or lies
+    < CHAIN_GAP after it without re-covering CHM13 bases already in the hit (that would be a tandem copy)."""
     hits = []
     for key in sorted({(p[0], p[3]) for p in pieces}):
         cur = None
         for p in sorted((p for p in pieces if (p[0], p[3]) == key), key=lambda p: p[1]):
             contig, q_lo, q_hi, strand, t_lo, t_hi, m, x, g = p
-            if cur and q_lo - cur["end"] <= CHAIN_GAP and all(t_hi <= a or t_lo >= b for a, b in cur["t"]):
+            overlaps = cur and q_lo < cur["end"]
+            near_new = cur and q_lo - cur["end"] <= CHAIN_GAP and all(t_hi <= a or t_lo >= b for a, b in cur["t"])
+            if overlaps or near_new:
                 cur["end"] = max(cur["end"], q_hi)
                 cur["t"].append((t_lo, t_hi))
                 cur["mxg"] = [u + v for u, v in zip(cur["mxg"], (m, x, g))]
@@ -327,9 +342,9 @@ def chain(pieces, gene_len):
                 hits.append(cur)
     out = []
     for h in hits:
-        m, x, g = h["mxg"]
+        m, x, g = h["mxg"]  # identity summed over pieces (an overlap between records counts twice)
         out.append(dict(contig=h["contig"], start=h["start"], end=h["end"], aln_strand=h["aln_strand"],
-                        cov=sum(b - a for a, b in h["t"]) / gene_len, ident=m / (m + x + g) if m + x + g else 0.0))
+                        cov=union_len(h["t"]) / gene_len, ident=m / (m + x + g) if m + x + g else 0.0))
     return out
 
 
